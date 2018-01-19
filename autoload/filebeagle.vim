@@ -416,9 +416,16 @@ function! s:NewDirectoryViewer()
             nnoremap <buffer> <silent> <C-W>t        :call b:filebeagle_directory_viewer.new_viewer("tabedit")<CR>
             nnoremap <buffer> <silent> <C-W>T        :call b:filebeagle_directory_viewer.new_viewer("tabedit")<CR>
 
+            """ Directory listing file management
+            nnoremap <buffer> <silent> D             :call b:filebeagle_directory_viewer.delete_targets()<CR>
+            vnoremap <buffer> <silent> D             :call b:filebeagle_directory_viewer.delete_targets()<CR>
+            nnoremap <buffer> <silent> x             :call b:filebeagle_directory_viewer.exec_targets()<CR>
+            vnoremap <buffer> <silent> x             :call b:filebeagle_directory_viewer.exec_targets()<CR>
+            nnoremap <buffer> <silent> R             :call b:filebeagle_directory_viewer.rename_target()<CR>
+
             """ Directory listing buffer management
             nnoremap <Plug>(FileBeagleBufferRefresh)                            :call b:filebeagle_directory_viewer.refresh()<CR>
-            let l:default_normal_plug_map['FileBeagleBufferRefresh'] = 'R'
+            let l:default_normal_plug_map['FileBeagleBufferRefresh'] = 'r'
             nnoremap <Plug>(FileBeagleBufferSetFilter)                          :call b:filebeagle_directory_viewer.set_filter_exp()<CR>
             let l:default_normal_plug_map['FileBeagleBufferSetFilter'] = 'f'
             nnoremap <Plug>(FileBeagleBufferToggleFilter)                       :call b:filebeagle_directory_viewer.toggle_filter()<CR>
@@ -965,6 +972,135 @@ function! s:NewDirectoryViewer()
             call remove(self.prev_focus_dirs, -1)
             call self.set_focus_dir(new_focus_dir, new_focus_file, 0)
         endif
+    endfunction
+
+    function! directory_viewer.execute(cmd) dict
+        if has("win32") && &shell !~? 'cmd' && !g:netrw_cygwin
+            let savedShell=[&shell,&shellcmdflag,&shellxquote,&shellxescape,&shellquote,&shellpipe,&shellredir,&shellslash]
+            set shell& shellcmdflag& shellxquote& shellxescape&
+            set shellquote& shellpipe& shellredir& shellslash&
+            exe a:cmd
+            let [&shell,&shellcmdflag,&shellxquote,&shellxescape,&shellquote,&shellpipe,&shellredir,&shellslash] = savedShell
+        else
+            exe a:cmd
+        endif
+    endfun
+
+    function! s:ShellEscape(s, ...)
+        if (has('win32') || has('win64')) && $SHELL == '' && &shellslash
+            return printf('"%s"', substitute(a:s, '"', '""', 'g'))
+        endif
+        let f = a:0 > 0 ? a:1 : 0
+        return shellescape(a:s, f)
+    endfunction
+
+    function! directory_viewer.exec_targets() dict
+        let l:target = self.jump_map[line(".")].full_path
+
+        if v:count == 0
+            let l:start_line = a:firstline
+            let l:end_line = a:lastline
+        else
+            let l:start_line = v:count
+            let l:end_line = v:count
+        endif
+
+        let l:num_dir_targets = 0
+        let l:selected_entries = []
+        for l:cur_line in range(l:start_line, l:end_line)
+            if !has_key(self.jump_map, l:cur_line)
+                call s:_filebeagle_messenger.send_info("Line " . l:cur_line . " is not a valid navigation entry")
+                return 0
+            endif
+            call add(l:selected_entries, self.jump_map[l:cur_line])
+        endfor
+
+        let l:all = 0
+        for l:entry in l:selected_entries
+            let l:path = fnameescape(l:entry.full_path)
+
+            if has("win32") || has("win64")
+               if executable("start")
+                    call self.execute('sil !start rundll32 url.dll,FileProtocolHandler '.s:ShellEscape(l:path,1))
+                elseif executable("rundll32")
+                    call s:NetrwExe('sil! !rundll32 url.dll,FileProtocolHandler '.s:ShellEscape(l:path,1))
+                else
+                endif
+            elseif has("macunix") && executable("open")
+               call self.execute("sil !open ".s:ShellEscape(l:path,1))
+           elseif has("unix") && executable("xdg-open")
+               call self.execute("sil !xdg-open ".s:ShellEscape(l:path,1))
+            endif
+        endfor
+
+        call self.refresh()
+    endfunction
+
+    function! directory_viewer.rename_target() dict
+        let l:path = self.jump_map[line(".")].full_path
+
+        let newPath = input("Moving ".l:path." to : ",l:path,"file")
+        call rename(l:path, l:newPath)
+
+        call self.refresh()
+    endfunction
+
+    function! directory_viewer.delete_targets() dict
+        let l:target = self.jump_map[line(".")].full_path
+
+        if v:count == 0
+            let l:start_line = a:firstline
+            let l:end_line = a:lastline
+        else
+            let l:start_line = v:count
+            let l:end_line = v:count
+        endif
+
+        let l:num_dir_targets = 0
+        let l:selected_entries = []
+        for l:cur_line in range(l:start_line, l:end_line)
+            if !has_key(self.jump_map, l:cur_line)
+                call s:_filebeagle_messenger.send_info("Line " . l:cur_line . " is not a valid navigation entry")
+                return 0
+            endif
+            call add(l:selected_entries, self.jump_map[l:cur_line])
+        endfor
+
+        let l:all = 0
+        for l:entry in l:selected_entries
+            let l:path = fnameescape(l:entry.full_path)
+
+            let l:do_del = 0
+
+            if !l:all
+                let ok= input("Confirm deletion of <".l:path."> ","[{y(es)},n(o),a(ll),q(uit)] ")
+                let ok= substitute(ok,'\[{y(es)},n(o),a(ll),q(uit)]\s*','','e')
+                if ok == "q"
+                    return 0
+                elseif ok == "a"
+                    let l:all = 1
+                    let l:do_del = 1
+                elseif ok == "y"
+                    let l:do_del = 1
+                endif
+            else:
+                let l:do_del = 1
+            endif
+
+            if l:do_del
+                if l:entry.is_dir
+                    if delete(l:path, "d")
+                        call s:_filebeagle_messenger.send_error("Couldn't delete directory <".l:path.">")
+                    endif
+                else
+                    if delete(l:path)
+                        call s:_filebeagle_messenger.send_error("Couldn't delete file <".l:path.">")
+                    endif
+                endif
+            endif
+        endfor
+
+        call self.refresh()
     endfunction
 
     function! directory_viewer.yank_target_name(part, register) dict
