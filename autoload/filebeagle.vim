@@ -1046,8 +1046,6 @@ function! s:NewDirectoryViewer()
     endfunction
 
     function! directory_viewer.delete_targets() dict
-        let l:target = self.jump_map[line(".")].full_path
-
         if v:count == 0
             let l:start_line = a:firstline
             let l:end_line = a:lastline
@@ -1060,7 +1058,7 @@ function! s:NewDirectoryViewer()
         let l:selected_entries = []
         for l:cur_line in range(l:start_line, l:end_line)
             if !has_key(self.jump_map, l:cur_line)
-                call s:_filebeagle_messenger.send_info("Line " . l:cur_line . " is not a valid navigation entry")
+                call s:_filebeagle_messenger.send_error("Line " . l:cur_line . " is not a valid navigation entry")
                 return 0
             endif
             call add(l:selected_entries, self.jump_map[l:cur_line])
@@ -1083,7 +1081,7 @@ function! s:NewDirectoryViewer()
                 elseif ok == "y"
                     let l:do_del = 1
                 endif
-            else:
+            else
                 let l:do_del = 1
             endif
 
