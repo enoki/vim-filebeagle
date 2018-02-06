@@ -98,13 +98,7 @@ endfunction
 function! s:parent_dir(current_dir)
     let l:current_dir = fnamemodify(a:current_dir, ":p")
     if has("win16") || has("win32") || has("win64")
-        let d = join(split(l:current_dir, s:sep_as_pattern)[:-2], s:sep)
-        if empty(d)
-            let d = a:current_dir
-        endif
-        if d =~ ":$"
-            let d = d . s:sep
-        endif
+        return fnamemodify(l:current_dir, ":h:h")
     else
         let d = s:sep . join(split(l:current_dir, s:sep_as_pattern)[:-2], s:sep)
     endif
@@ -173,7 +167,7 @@ function! s:discover_paths(current_dir, glob_pattern, is_include_hidden, is_incl
     " call add(dir_paths, s:GetCurrentDirEntry(l:current_dir))
     call add(dir_paths, s:build_current_parent_dir_entry(l:current_dir))
     for path_entry in paths
-        let path_entry = substitute(path_entry, s:sep_as_pattern.'\+', s:sep, 'g')
+        " let path_entry = substitute(path_entry, s:sep_as_pattern.'\+', s:sep, 'g')
         let path_entry = substitute(path_entry, s:sep_as_pattern.'$', '', 'g')
         let full_path = fnamemodify(path_entry, ":p")
         let basename = fnamemodify(path_entry, ":t")
