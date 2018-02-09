@@ -98,7 +98,13 @@ endfunction
 function! s:parent_dir(current_dir)
     let l:current_dir = fnamemodify(a:current_dir, ":p")
     if has("win16") || has("win32") || has("win64")
-        return fnamemodify(l:current_dir, ":h:h")
+        let d = join(split(l:current_dir, s:sep_as_pattern)[:-2], s:sep)
+        if empty(d)
+            let d = a:current_dir
+        endif
+        if d =~ ":$"
+            let d = d . s:sep
+        endif
     else
         let d = s:sep . join(split(l:current_dir, s:sep_as_pattern)[:-2], s:sep)
     endif
@@ -167,7 +173,7 @@ function! s:discover_paths(current_dir, glob_pattern, is_include_hidden, is_incl
     " call add(dir_paths, s:GetCurrentDirEntry(l:current_dir))
     call add(dir_paths, s:build_current_parent_dir_entry(l:current_dir))
     for path_entry in paths
-        " let path_entry = substitute(path_entry, s:sep_as_pattern.'\+', s:sep, 'g')
+        let path_entry = substitute(path_entry, s:sep_as_pattern.'\+', s:sep, 'g')
         let path_entry = substitute(path_entry, s:sep_as_pattern.'$', '', 'g')
         let full_path = fnamemodify(path_entry, ":p")
         let basename = fnamemodify(path_entry, ":t")
@@ -416,6 +422,7 @@ function! s:NewDirectoryViewer()
             nnoremap <buffer> <silent> x             :call b:filebeagle_directory_viewer.exec_targets()<CR>
             vnoremap <buffer> <silent> x             :call b:filebeagle_directory_viewer.exec_targets()<CR>
             nnoremap <buffer> <silent> R             :call b:filebeagle_directory_viewer.rename_target()<CR>
+            nnoremap <buffer> <silent> d             :call b:filebeagle_directory_viewer.make_directory(b:filebeagle_directory_viewer.focus_dir)<CR>
 
             """ Directory listing buffer management
             nnoremap <Plug>(FileBeagleBufferRefresh)                            :call b:filebeagle_directory_viewer.refresh()<CR>
@@ -608,8 +615,8 @@ function! s:NewDirectoryViewer()
             """ File operations
             nnoremap <buffer> <silent> +             :call b:filebeagle_directory_viewer.new_file(b:filebeagle_directory_viewer.focus_dir, 1, 0)<CR>
             nnoremap <buffer> <silent> %             :call b:filebeagle_directory_viewer.new_file(b:filebeagle_directory_viewer.focus_dir, 0, 1)<CR>
-            nnoremap <buffer> <silent> R             :<C-U>call b:filebeagle_directory_viewer.read_target("", 0)<CR>
-            vnoremap <buffer> <silent> R             :call b:filebeagle_directory_viewer.read_target("", 0)<CR>
+            "nnoremap <buffer> <silent> R             :<C-U>call b:filebeagle_directory_viewer.read_target("", 0)<CR>
+            "vnoremap <buffer> <silent> R             :call b:filebeagle_directory_viewer.read_target("", 0)<CR>
             nnoremap <buffer> <silent> 0r            :<C-U>call b:filebeagle_directory_viewer.read_target("0", 0)<CR>
             vnoremap <buffer> <silent> 0r            :call b:filebeagle_directory_viewer.read_target("0", 0)<CR>
             nnoremap <buffer> <silent> $r            :<C-U>call b:filebeagle_directory_viewer.read_target("$", 0)<CR>
@@ -1026,6 +1033,14 @@ function! s:NewDirectoryViewer()
                call self.execute("sil !xdg-open ".s:ShellEscape(l:path,1))
             endif
         endfor
+
+        call self.refresh()
+    endfunction
+
+    function! directory_viewer.make_directory(parent_dir) dict
+        let l:dirname = input("Add directory: ".a:parent_dir, "", "custom,FileBeagleCompleteNewFileName")
+
+        call mkdir(a:parent_dir . "/" . l:dirname, "p")
 
         call self.refresh()
     endfunction
